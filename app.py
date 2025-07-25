@@ -33,30 +33,30 @@ class AspToCSharpConverter:
             (r'\s+Or\s+', r' || '),
             (r'\bNot\s+', r'!'),
             (r'\s+&\s+', r' + '),
-            # 주석 변환
             (r"'\s*(.+?)$", r'// \1'),
-            # Select Case 변환
             (r'Select\s+Case\s+(.+)', r'switch (\1) {'),
-            (r'Case\s+"?([^"]+)"?', r'case "\1":'),
+            (r'Case\s+"?([^\"]+)"?', r'case "\1":'),
             (r'Case\s+Else', r'default:'),
             (r'End\s+Select', r'}'),
-            # 변수 선언 확장 변환
-            (r'Dim\s+(\w+)\s*:\s*\1\s*=\s*(True|False)', lambda m: f"bool {m.group(1)} = {m.group(2).lower()};"),
-            (r'Dim\s+(\w+)\s*:\s*\1\s*=\s*"([^"]*)"', r'string \1 = "\2";'),
-            (r'Dim\s+(\w+)\s*:\s*\1\s*=\s*([0-9]+\.[0-9]+)', r'double \1 = \2;'),
-            (r'Dim\s+(\w+)\s*:\s*\1\s*=\s*([0-9]+)', r'int \1 = \2;'),
-            (r'Dim\s+(\w+)\s*:\s*\1\s*=\s*Date\(\)', r'DateTime \1 = DateTime.Now;'),
-            (r'Dim\s+([^:=]+)', lambda m: '\n'.join([f'string {v.strip()} = "";' for v in m.group(1).split(',')])),
-            # 문자열 변수지만 false/true 값으로 할당된 경우 boolean으로 처리
-            (r'string\s+(\w+)\s*=\s*""\s*;\s*\1\s*=\s*(true|false);', lambda m: f'bool {m.group(1)} = {m.group(2).lower()};'),
-            # 변수 값 할당 처리 (== -> =) + 세미콜론 추가
-            (r'^(\s*)(\w+)\s*==\s*(.+)', r'\1\2 = \3;')
+
+            # 변수 선언 및 타입 추론
+            (r'Dim\s+(\w+)\s*:\s*\1\s*=\s*True', lambda m: f"bool {m.group(1)} = true;"),
+            (r'Dim\s+(\w+)\s*:\s*\1\s*=\s*False', lambda m: f"bool {m.group(1)} = false;"),
+            (r'Dim\s+(\w+)\s*:\s*\1\s*=\s*\"([^\"]*)\"', lambda m: f'string {m.group(1)} = "{m.group(2)}";'),
+            (r'Dim\s+(\w+)\s*:\s*\1\s*=\s*([0-9]+\.[0-9]+)', lambda m: f'double {m.group(1)} = {m.group(2)};'),
+            (r'Dim\s+(\w+)\s*:\s*\1\s*=\s*([0-9]+)', lambda m: f'int {m.group(1)} = {m.group(2)};'),
+            (r'Dim\s+(\w+)\s*:\s*\1\s*=\s*Date\(\)', lambda m: f'DateTime {m.group(1)} = DateTime.Now;'),
+
+            # 여러 개 선언 (string 기본값)
+            (r'Dim\s+([^:=]+)', lambda m: '\n'.join([f'string {v.strip()} = "";' for v in m.group(1).split(',') if v.strip()])),
+
+            (r'strubg', 'string'),
+            (r'^\s*(\w+)\s*==\s*(.+)', r'\1 = \2;')
         ]
 
     def convert_asp_to_csharp(self, asp_code: str) -> str:
         result_lines = []
         for line in asp_code.splitlines():
-            original_line = line
             line = line.strip()
             is_if_condition = line.lower().startswith("if ") or line.lower().startswith("else if ")
 
