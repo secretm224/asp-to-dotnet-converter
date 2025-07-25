@@ -1,6 +1,7 @@
 import streamlit as st
 import re
 from datetime import datetime
+from typing import Callable, Union
 
 # 페이지 설정
 st.set_page_config(
@@ -11,11 +12,11 @@ st.set_page_config(
 
 class AspToCSharpConverter:
     def __init__(self):
-        self.conversion_rules = [
+        self.conversion_rules: list[tuple[str, Union[str, Callable[[re.Match], str]]]] = [
             (r'<%\s*', ''),
             (r'\s*%>', ''),
             (r'CStr\s*\(\s*Date\s*\(\s*\)\s*\)', r'DateTime.Now.ToString("yyyy-MM-dd")'),
-            (r'DateTime\.Now\.ToString\("yyyy-MM-dd"\)\s*<=\s*"([0-9\-]+)"', r'DateTime.Now <= DateTime.Parse("\1")'),
+            (r'DateTime\\.Now\\.ToString\("yyyy-MM-dd"\)\\s*<=\\s*"([0-9\\-]+)"', r'DateTime.Now <= DateTime.Parse("\1")'),
             (r'RequestQ\("([^"]+)"\)', r'(Request.QueryString["\1"] ?? "")'),
             (r'Len\(([^)]+)\)', r'\1.Length'),
             (r'Left\(([^,]+),\s*(\d+)\)', r'\1.Substring(0, \2)'),
@@ -33,23 +34,35 @@ class AspToCSharpConverter:
             (r'\bNot\s+', r'!'),
             (r'\s+&\s+', r' + '),
             # 주석 변환
-            (r"'\s*(.+?)$", r'// \1')
+            (r"'\s*(.+?)$", r'// \1'),
+            # Select Case 변환
+            (r'Select\s+Case\s+(.+)', r'switch (\1) {'),
+            (r'Case\s+"?([^\"]+)"?', r'case "\1":'),
+            (r'Case\s+Else', r'default:'),
+            (r'End\s+Select', r'}'),
+            # 변수 선언 확장 변환
+            (r'Dim\s+(\w+)\s*:\s*\1\s*=\s*(True|False)', lambda m: f"bool {m.group(1)} = {m.group(2).lower()};"),
+            (r'Dim\s+(\w+)\s*:\s*\1\s*=\s*"([^"]*)"', r'string \1 = "\2";'),
+            (r'Dim\s+(\w+)\s*:\s*\1\s*=\s*([0-9]+)', r'int \1 = \2;'),
+            (r'Dim\s+(\w+)\s*:\s*\1\s*=\s*([0-9]+\.[0-9]+)', r'double \1 = \2;'),
+            (r'Dim\s+([^:=]+)', lambda m: '\n'.join([f'string {v.strip()} = "";' for v in m.group(1).split(',')]))
         ]
 
-    def convert_asp_to_csharp(self, asp_code):
+    def convert_asp_to_csharp(self, asp_code: str) -> str:
         result_lines = []
         for line in asp_code.splitlines():
-            original_line = line  # 백업
+            original_line = line
             line = line.strip()
             is_if_condition = line.lower().startswith("if ") or line.lower().startswith("else if ")
 
             for pattern, replacement in self.conversion_rules:
-                # 조건문 내부에서는 == true / false 유지
                 if ('== true' in pattern or '== false' in pattern) and is_if_condition:
                     continue
-                line = re.sub(pattern, replacement, line, flags=re.IGNORECASE)
+                if callable(replacement):
+                    line = re.sub(pattern, replacement, line, flags=re.IGNORECASE)
+                else:
+                    line = re.sub(pattern, replacement, line, flags=re.IGNORECASE)
 
-            # true / false 할당 처리 (조건문 외부만)
             if not is_if_condition:
                 line = re.sub(r'\b(\w+)\s*==\s*true\b', r'\1 = true;', line)
                 line = re.sub(r'\b(\w+)\s*==\s*false\b', r'\1 = false;', line)
@@ -60,13 +73,12 @@ class AspToCSharpConverter:
 
 
 def main():
-    st.title("🔄 ASP to C# Converter with Enhanced Date Logic")
+    st.title("🔄 ASP to C# Converter with Full Variable & Case Support")
     converter = AspToCSharpConverter()
     asp_code = st.text_area("ASP 코드 입력", height=300)
 
     if st.button("변환하기"):
         converted = converter.convert_asp_to_csharp(asp_code)
-        # 후처리: 중괄호 정리 (예시에서는 간단히 줄 맞춤만 처리)
         converted_lines = []
         indent_level = 0
         for line in converted.splitlines():
@@ -74,7 +86,7 @@ def main():
             if line == '}':
                 indent_level = max(0, indent_level - 1)
             converted_lines.append('    ' * indent_level + line)
-            if line.endswith('{'):
+            if line.endswith('{') or line.endswith(':'):
                 indent_level += 1
         formatted_code = '\n'.join(converted_lines)
 
