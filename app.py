@@ -17,7 +17,7 @@ class AspToCSharpConverter:
             (r'\s*%>', ''),
             (r'CStr\s*\(\s*Date\s*\(\s*\)\s*\)', r'DateTime.Now.ToString("yyyy-MM-dd")'),
             (r'DateTime\\.Now\\.ToString\("yyyy-MM-dd"\)\\s*<=\\s*"([0-9\\-]+)"', r'DateTime.Now <= DateTime.Parse("\1")'),
-            (r'RequestQ\("([^"]+)"\)', r'(Request.QueryString["\1"] ?? "")'),
+            (r'RequestQ\("([^\"]+)"\)', r'(Request.QueryString["\1"] ?? "")'),
             (r'Len\(([^)]+)\)', r'\1.Length'),
             (r'Left\(([^,]+),\s*(\d+)\)', r'\1.Substring(0, \2)'),
             (r'Right\(([^,]+),\s*(\d+)\)', r'\1.Substring(\1.Length - \2)'),
@@ -42,10 +42,12 @@ class AspToCSharpConverter:
             (r'End\s+Select', r'}'),
             # 변수 선언 확장 변환
             (r'Dim\s+(\w+)\s*:\s*\1\s*=\s*(True|False)', lambda m: f"bool {m.group(1)} = {m.group(2).lower()};"),
-            (r'Dim\s+(\w+)\s*:\s*\1\s*=\s*"([^"]*)"', r'string \1 = "\2";'),
-            (r'Dim\s+(\w+)\s*:\s*\1\s*=\s*([0-9]+)', r'int \1 = \2;'),
+            (r'Dim\s+(\w+)\s*:\s*\1\s*=\s*\"([^\"]*)\"', r'string \1 = "\2";'),
             (r'Dim\s+(\w+)\s*:\s*\1\s*=\s*([0-9]+\.[0-9]+)', r'double \1 = \2;'),
-            (r'Dim\s+([^:=]+)', lambda m: '\n'.join([f'string {v.strip()} = "";' for v in m.group(1).split(',')]))
+            (r'Dim\s+(\w+)\s*:\s*\1\s*=\s*([0-9]+)', r'int \1 = \2;'),
+            (r'Dim\s+([^:=]+)', lambda m: '\n'.join([f'string {v.strip()} = "";' for v in m.group(1).split(',')])),
+            # 변수 값 할당 처리 (== -> =) + 세미콜론 추가
+            (r'^(\s*)(\w+)\s*==\s*(.+)', r'\1\2 = \3;')
         ]
 
     def convert_asp_to_csharp(self, asp_code: str) -> str:
